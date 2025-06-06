@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Previsão do Tempo e Relatos</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #6dd5ed, #2193b0);
+            color: #333;
+            margin: 0;
+            padding: 0 10px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1, h2, h3, h4 {
+            color: #2193b0;
+            text-align: center;
+            margin: 20px 0 10px;
+        }
+
+        a.logout {
+            color: #ffcc00;
+            text-decoration: none;
+            font-weight: bold;
+            margin-bottom: 20px;
+            align-self: flex-end;
+            margin-right: 10px;
+        }
+        a.logout:hover {
+            text-decoration: underline;
+        }
+
+        #map {
+            height: 400px;
+            width: 100%;
+            max-width: 700px;
+            margin-bottom: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        form {
+            background: #fff;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 500px;
+            box-sizing: border-box;
+        }
+        form label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+        form input[type="text"],
+        form select,
+        form textarea {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 2px solid #2193b0;
+            border-radius: 10px;
+            outline: none;
+            transition: border-color 0.3s;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+        form input[type="text"]:focus,
+        form select:focus,
+        form textarea:focus {
+            border-color: #6dd5ed;
+            box-shadow: 0 0 5px rgba(105, 195, 228, 0.5);
+        }
+        form button {
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 12px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: background 0.3s, transform 0.2s;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        form button:hover {
+            background: #218838;
+            transform: scale(1.05);
+        }
+
+        .aviso {
+            color: red;
+            margin-bottom: 10px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        #lista-relatos {
+            width: 100%;
+            max-width: 700px;
+            margin: 0 auto 30px;
+        }
+
+        .relato {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 10px;
+            background: #f9f9f9;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .relato strong {
+            color: #2193b0;
+            font-weight: 700;
+        }
+
+        ul.previsao-list {
+            list-style: none;
+            padding: 0;
+            max-width: 700px;
+            margin: 0 auto 30px;
+        }
+        ul.previsao-list li {
+            background: #f0f8ff;
+            border-radius: 10px;
+            padding: 10px;
+            margin: 6px 0;
+            box-shadow: 0 2px 8px rgba(33, 147, 240, 0.2);
+            font-size: 1rem;
+        }
+
+        p.clima-atual {
+            max-width: 700px;
+            margin: 0 auto 15px;
+            font-size: 1.1rem;
+            color: #444;
+            text-align: center;
+        }
+
+        p.clima-atual strong {
+            color: #2193b0;
+        }
+
+        p.no-relatos {
+            text-align: center;
+            font-size: 1.1rem;
+            color: #555;
+            max-width: 700px;
+            margin: 0 auto 20px;
+        }
+
+        /* Responsivo */
+        @media(max-width:700px) {
+            body {
+                padding: 0 10px 30px;
+            }
+            #map, #lista-relatos, ul.previsao-list, form {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="{{ url_for('logout') }}" class="logout" aria-label="Sair da aplicação">Sair</a>
+    <h1>Bem-vindo, {{ session['usuario'] }}</h1>
+
+    <h2>Buscar previsão do tempo</h2>
+
+    {% if aviso %}
+    <p class="aviso" role="alert">{{ aviso }}</p>
+    {% endif %}
+
+    <form method="POST" action="/">
+        <label for="cidade">Digite o nome da cidade:</label>
+        <input type="text" id="cidade" name="cidade" value="{{ cidade or '' }}" autocomplete="off" aria-describedby="avisoCidade">
+        <input type="hidden" id="lat" name="lat" value="{{ lat or '' }}">
+        <input type="hidden" id="lon" name="lon" value="{{ lon or '' }}">
+        <button type="submit">Buscar</button>
+    </form>
+
+    <div id="map" aria-label="Mapa para seleção de localização"></div>
+
+    {% if clima %}
+    <h3>Clima atual em {{ cidade }}:</h3>
+    <p class="clima-atual">
+        <strong>Min:</strong> {{ clima.min }} °C | <strong>Max:</strong> {{ clima.max }} °C
+    </p>
+    <p class="clima-atual">
+        <strong>Descrição:</strong> {{ clima.descricao }}
+    </p>
+
+    <h4>Previsão para os próximos dias:</h4>
+    <ul class="previsao-list">
+        {% for dia in previsao %}
+        <li>{{ dia.dia }}: Min {{ dia.min }} °C / Max {{ dia.max }} °C — {{ dia.descricao }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <h2>Relatos climáticos</h2>
+    <div id="lista-relatos" role="list">
+        {% if relatos %}
+            {% for r in relatos %}
+            <div class="relato" role="listitem">
+                <strong>{{ r.tipo }}</strong> por {{ r.usuario }} em {{ r.data }}<br>
+                Local: {{ r.cidade }} ({{ r.lat }}, {{ r.lon }})<br>
+                {{ r.descricao }}
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="no-relatos">Nenhum relato registrado.</p>
+        {% endif %}
+    </div>
+
+    <h3>Adicionar relato</h3>
+    <form id="form-relato" aria-label="Adicionar relato climático">
+        <label for="tipo">Tipo:</label>
+        <select id="tipo" required>
+            <option value="" disabled selected>Selecione</option>
+            <option value="Chuva">Chuva</option>
+            <option value="Tempestade">Tempestade</option>
+            <option value="Granizo">Granizo</option>
+            <option value="Outro">Outro</option>
+        </select>
+        <label for="descricao">Descrição:</label>
+        <textarea id="descricao" rows="3" required></textarea>
+        <button type="submit">Enviar relato</button>
+    </form>
+
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script>
+        var map = L.map('map').setView([-15.8, -47.9], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        {% if lat and lon %}
+            L.marker([{{ lat }}, {{ lon }}]).addTo(map)
+              .bindPopup("{{ cidade }}").openPopup();
+            map.setView([{{ lat }}, {{ lon }}], 10);
+        {% endif %}
+
+        // Quando o usuário clicar no mapa, seleciona local e submete form para buscar clima
+        map.on('click', function(e) {
+            var lat = e.latlng.lat.toFixed(5);
+            var lon = e.latlng.lng.toFixed(5);
+
+            document.getElementById('lat').value = lat;
+            document.getElementById('lon').value = lon;
+            document.querySelector('input[name="cidade"]').value = '';
+            document.forms[0].submit();
+        });
+
+        // Enviar relato via fetch
+        document.getElementById('form-relato').addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (!document.getElementById('lat').value || !document.getElementById('lon').value) {
+                alert('Selecione uma cidade ou ponto no mapa para adicionar relato.');
+                return;
+            }
+            var relato = {
+                lat: document.getElementById('lat').value,
+                lon: document.getElementById('lon').value,
+                tipo: document.getElementById('tipo').value,
+                descricao: document.getElementById('descricao').value.trim()
+            };
+            if (!relato.tipo || !relato.descricao) {
+                alert('Preencha tipo e descrição do relato.');
+                return;
+            }
+            fetch('/adicionar_relato', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(relato)
+            }).then(res => res.json()).then(data => {
+                if(data.sucesso) {
+                    alert('Relato enviado!');
+                    location.reload();
+                } else {
+                    alert('Erro ao enviar relato.');
+                }
+            }).catch(() => alert('Erro na comunicação.'));
+        });
+    </script>
+</body>
+</html>
+
